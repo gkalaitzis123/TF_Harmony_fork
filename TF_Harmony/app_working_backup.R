@@ -47,6 +47,7 @@ source("helpers.R", local = TRUE)
 
   prev_matched <- reactiveVal(data.table())
   matched <- reactive({
+    validate(need(length(input$TFs) >= 2, "Select at least two TFs for pairwise analysis."))
     result <- matchtidy(tarfs(), prev_matched())
     prev_matched(result)
     result
@@ -55,6 +56,7 @@ source("helpers.R", local = TRUE)
   ## Restricts Harmony to only use the input TFs
   ## Uses newdt - the harmony data with fewer columns 
   subgraph <- reactive({
+    validate(need(length(input$TFs) >= 2, "Select at least two TFs for pairwise analysis."))
     newdt[(TF1 %in% input$TFs)][TF2 %in% input$TFs]
     })
 
@@ -66,29 +68,24 @@ source("helpers.R", local = TRUE)
   
   output$motifplot <- renderImage({
     req(input$pairwise == "pairwisemotifs")
-    
+    req(length(input$TFs) >= 1)
+
     pattern <- paste0("^(", paste0(input$TFs, collapse = "|"), ")_")
-    
+
     subpfms <- pfms[grepl(pattern, names(pfms))]
+    validate(need(length(subpfms) >= 1, "No motifs found for the selected TFs."))
 
+    outfile <- tempfile(fileext = ".svg")
+    svg(outfile, width = 10, height = 5)
     grid::grid.newpage()
-    tryCatch({
-      
-      outfile <- tempfile(fileext = ".svg")
+    motifStack(subpfms, layout = input$motiftreestyle)
+    dev.off()
 
-      svg(outfile, width = 10, height = 5)
-      motifStack(subpfms, layout = input$motiftreestyle)
-      dev.off()
-      list(src = outfile,
-           contentType = 'image/svg+xml',
-           width = "100%",  # SVG scales naturally
-           height = "auto",
-           alt = "Motif stack plot")
-    
-       
-    }, error = function(e) {
-      print(paste("Motif plot error:", e$message))
-    })
+    list(src = outfile,
+         contentType = 'image/svg+xml',
+         width = "100%",
+         height = "auto",
+         alt = "Motif stack plot")
     
   }, deleteFile = TRUE)
   ## Showing subset harmony table in an interactive DataTable with scroll bars
@@ -97,12 +94,14 @@ source("helpers.R", local = TRUE)
     output$harmonyTable <- DT::renderDataTable(
       {
         setDT(subgraph())
-      }, 
+      },
       selection = 'single',
+      extensions = 'Buttons',
       options = list(
         scrollY = '400px',
-        paging = FALSE
-        
+        paging = FALSE,
+        dom = 'Bfrtip',
+        buttons = list(list(extend = 'csv', filename = 'pairwise_harmony'))
       )
     )  
     
@@ -110,7 +109,7 @@ source("helpers.R", local = TRUE)
     ## Most future Global Analysis harmony references use subdt**
     ## Subsetted in such a way that you can specify TF or TF Family
     subdt <- reactive({
-      subdt <-
+      validate(need(length(input$family1) >= 1, "Select at least one TF or TF Family."))
         dt[(((TF1_Family %in% input$family1) &
                (TF2_Family %in% input$family1)
         ) |
@@ -134,14 +133,15 @@ source("helpers.R", local = TRUE)
     ## Only shows harmony for subsetted TF list based on user input
     output$fullharmonydt <- DT::renderDataTable(
       {
-        
         setDT(subdt())
-      }, 
+      },
       selection = 'single',
+      extensions = 'Buttons',
       options = list(
         scrollY = '800px',
-        paging = FALSE
-        
+        paging = FALSE,
+        dom = 'Bfrtip',
+        buttons = list(list(extend = 'csv', filename = 'global_harmony'))
       )
     )  
     
@@ -231,7 +231,7 @@ source("helpers.R", local = TRUE)
     goout <- reactive({
       targs <- split(matched()$rn, f = matched()$Inter)
       gost(targs, organism = "athaliana", multi_query = T)
-    })
+    }) %>% bindCache(sort(input$TFs))
     
     
     ## Rendering plot output of GO terms
@@ -249,11 +249,14 @@ source("helpers.R", local = TRUE)
       res$p_values <- sapply(res$p_values, min)
       DT::datatable(
         res[, c("source", "term_id", "term_name", "term_size", "p_values")],
+        extensions = 'Buttons',
         options = list(
           scrollX = TRUE,
           paging = TRUE,
           pageLength = 25,
           autoWidth = FALSE,
+          dom = 'Bfrtip',
+          buttons = list(list(extend = 'csv', filename = 'GO_terms')),
           columnDefs = list(
             list(width = '30px', targets = c(0, 1)),
             list(width = '22px', targets = 2),
@@ -313,8 +316,10 @@ source("helpers.R", local = TRUE)
     ## For the harmony cutoff user input
     ## The slider is updated automatically to use the table minimum and maximum as the extreme values
     observeEvent(input$TFs, {
+      if (length(input$TFs) < 2) return()
       meltdt <- melt.data.table(subgraph(), id.vars = c("TF1", "TF2"), measure.vars = c("Concordant", "Discordant"))
       meltdt <- meltdt[!(is.na(value) | is.infinite(value))]
+      req(nrow(meltdt) > 0)
       updateSliderInput(session, inputId = "HarmonyRange", value = 0, min = 0, max = max(abs(meltdt$value)))
     })
     
@@ -432,7 +437,7 @@ source("helpers.R", local = TRUE)
         
         scale_color_viridis_d(direction = -1, end = 0.75) +
         
-        geom_smooth(aes(group = interaction(Inter, Harmony)), method = "lm", se = F, size = 1) +
+        geom_smooth(aes(group = interaction(Inter, Harmony)), method = "lm", se = F, linewidth = 1) +
         
         geom_vline(xintercept = 0) +
         
@@ -551,14 +556,13 @@ source("helpers.R", local = TRUE)
       
       # Create igraph object
       g <- graph_from_data_frame(edges[, .(from, to)], directed = TRUE)
-      
-      # Sugiyama layout
+
+      # Sugiyama layout with vertical stretch
       sugiyama_layout <- layout_with_sugiyama(g)$layout
-      
-      # Add layout to nodes (scale/flip for visNetwork)
-      nodes[, x := sugiyama_layout[, 1] * 100]
-      nodes[, y := -sugiyama_layout[, 2] * 100]
-      
+
+      nodes[, x := sugiyama_layout[, 1] * 70]
+      nodes[, y := -sugiyama_layout[, 2] * 1500]
+
       # -------------------------
       # 4. Plot in visNetwork
       # -------------------------
@@ -567,7 +571,7 @@ source("helpers.R", local = TRUE)
         visEdges(smooth = TRUE) %>%
         visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) %>%
         visInteraction(navigationButtons = TRUE) %>%
-        visPhysics(enabled = FALSE)  # Respect igraph layout
+        visPhysics(enabled = FALSE)
       
       
     })
@@ -733,21 +737,22 @@ source("helpers.R", local = TRUE)
 
     subids <- idoptions[!(idoptions %in% selids)]
 
-    motifupclust <- motifupclust()
-    motifupclust$labels <- sub("_up", "", motifupclust$labels)
-    motifupclust$labels <- as.character(motifupclust$labels)
-    
-    motifdownclust <- motifdownclust()
-    motifdownclust$labels <- sub("_down", "", motifdownclust$labels)
-    motifdownclust$labels <- as.character(motifdownclust$labels)
+    muc <- motifupclust()
+    muc$labels <- sub("_up", "", muc$labels)
+    muc$labels <- as.character(muc$labels)
+
+    mdc <- motifdownclust()
+    mdc$labels <- sub("_down", "", mdc$labels)
+    mdc$labels <- as.character(mdc$labels)
     
     if (length(subids) > 0) {
       ph <- phylogram::prune(ph, pattern = subids)
     } 
     
-    dd <- dendlist(as.dendrogram(conhclustx()), as.dendrogram(dishclustx()), ph, as.dendrogram(motifupclust), as.dendrogram(motifdownclust))
+    dd <- dendlist(as.dendrogram(conhclustx()), as.dendrogram(dishclustx()), ph, as.dendrogram(muc), as.dendrogram(mdc))
     
-    tanglegram(dd, sub = paste(input$tanglechoice1, "x", input$tanglechoice2), k_branches = input$kbreaks, k_labels = input$kbreaks, sort = T, which = c(which(choices == input$tanglechoice1), which(choices == input$tanglechoice2)))
+    kb <- as.integer(input$kbreaks)
+    tanglegram(dd, sub = paste(input$tanglechoice1, "x", input$tanglechoice2), k_branches = kb, k_labels = kb, sort = T, which = c(which(choices == input$tanglechoice1), which(choices == input$tanglechoice2)))
   })
   
   ## This creates the matrix of motif similarity 
@@ -762,7 +767,7 @@ source("helpers.R", local = TRUE)
     subpwms <- pwms[unique(matches)]
 
     compare_motifs(subpwms, method = input$motifcompmethod)
-  })
+  }) %>% bindCache(sort(input$family1), input$motifcompmethod)
   
   ## Calculates clustering object for motifs
   motifhclust <- reactive({
@@ -818,22 +823,37 @@ source("helpers.R", local = TRUE)
   ## This is a datatable over in Target Regulation - third tab
   ## Returns a datatable subsetted and in narrow format from the DEGs data
   ## Shows all TFs that target any of the provided Targets in the allgenes input
-  output$tfregdt <- renderDataTable({
-    setDT(targetsubnar())
+  output$tfregdt <- DT::renderDT({
+    DT::datatable(
+      setDT(targetsubnar()),
+      extensions = 'Buttons',
+      options = list(
+        dom = 'Bfrtip',
+        buttons = list(list(extend = 'csv', filename = 'target_DEGs'))
+      )
+    )
   })
-  
+
   ## This is a datatable in Target Regulation - third tab
   ## Takes the target subsetted/filtered data from DEGs data
   ## and then filters the vertices data structure based on DEG target regulation
   ## Returns the datatable showing TF, Family, Transcriptional Enhancer Strength, and shape - is a tf or not
-  output$targetregdt <- renderDataTable({
-    setDT(subvs())
+  output$targetregdt <- DT::renderDT({
+    DT::datatable(
+      setDT(subvs()),
+      extensions = 'Buttons',
+      options = list(
+        dom = 'Bfrtip',
+        buttons = list(list(extend = 'csv', filename = 'target_regulators'))
+      )
+    )
   })
   
   ## reactive function to create targetsubnar datatable
   ## uses User supplied cutoffs to filter and subset DEG data
   ## Restricts based on a list of Targets
   targetsubnar <- reactive({
+    validate(need(length(input$allgenes) >= 1, "Select at least one target gene."))
     padjcutoff <- as.numeric(input$regpcutoff)
     l2fccutoff <- as.numeric(input$reglfccutoff)
     

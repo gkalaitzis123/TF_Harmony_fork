@@ -75,12 +75,13 @@ harmony_hclust <- function(subdt, harmony_type, transpose = FALSE,
 ## Given multiple differential-expression result tables, compare every pair by merging on gene id, then tag each gene as
 ## concordant/discordant in direction of effect, caching previous pair computations if provided.
 matchtidy <- function(Tar1, oldmatch = data.table()) {
+  if (length(Tar1) < 2) return(data.table())
   combos <- c()
   listlength <- choose(length(Tar1), 2)
   tempagg <- vector("list", listlength)
   count <- 1
 
-  for (i in 1:length(Tar1)) {
+  for (i in seq_along(Tar1)) {
     for (j in i:length(Tar1)) {
       if (i == j) next
       inter <- paste0(names(Tar1)[i], "_", names(Tar1)[j])

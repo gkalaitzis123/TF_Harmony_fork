@@ -139,7 +139,7 @@ ui <- navbarPage("Landscape of TF Harmony",
 
       ## Raw harmony table for user to peruse and interact with
       tabPanel("Harmony Table",
-        DT::dataTableOutput(outputId = "fullharmonydt")
+        DT::dataTableOutput(outputId = "fullharmonydt") %>% withSpinner()
       ),
 
       ## Heatmap of motif similarity
@@ -205,14 +205,14 @@ ui <- navbarPage("Landscape of TF Harmony",
       ## Are the shared DEGs expressed in a specific root cell type at baseline?
       ## Overlay of Benfey cell type data subsetted to match shared DEGs
       tabPanel("Cell Type Specificity",
-        plotlyOutput(outputId = "ctplot", height = 1000)
+        plotlyOutput(outputId = "ctplot", height = 1000) %>% withSpinner()
       ),
 
       ## Are the shared DEGs differentially expressed at a given time period in the NxTime datasets?
       ## Overlay of NxTime data - subsetted to match shared DEGs
       tabPanel("NxTime Overlay",
         splitLayout(
-          cellWidths = c("65%", "55%"),
+          cellWidths = c("50%", "50%"),
           plotlyOutput(outputId = "nxtplot1", height = 1000),
           plotlyOutput(outputId = "nxtplot2", height = 1000)
         )
@@ -223,8 +223,8 @@ ui <- navbarPage("Landscape of TF Harmony",
       tabPanel("GO Terms",
         sliderInput(inputId = "goplotheight", min = 500, max = 10000, step = 100, value = 1000, label = "Plot height:"),
         fluidRow(
-          column(6, plotlyOutput(outputId = "goplot", width = "100%", height = 1000)),
-          column(6, div(style = "overflow-x: auto;", DT::DTOutput(outputId = "gotable", width = "100%")))
+          column(6, plotlyOutput(outputId = "goplot", width = "100%", height = 1000) %>% withSpinner()),
+          column(6, div(style = "overflow-x: auto;", DT::DTOutput(outputId = "gotable", width = "100%") %>% withSpinner()))
         )
       ),
 
