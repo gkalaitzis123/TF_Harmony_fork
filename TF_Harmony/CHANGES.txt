@@ -22,9 +22,6 @@ preprocess_data.R
   newdt.rds, vertices.rds, ids.rds, allgeneids.rds, idoptions.rds,
   tfswithfamilies.rds, allteds.rds, pwms_processed.rds, pfms.rds,
   phylo_dend.rds.
-  Key impact: the 669MB narpv TSV and 95MB cellTypeExpression TSV are the
-  main bottlenecks. As RDS they compress significantly and skip all parsing
-  overhead, cutting app startup time from ~30+ seconds to a few seconds.
 
 helpers.R
   Utility functions extracted from between the UI and server sections of the
@@ -165,10 +162,6 @@ Additional cleanup (current line numbers):
     As a result, the Data/DEGS/ folder is no longer referenced by any code in
     the app. All DEG data is accessed through narpv. The folder can be safely
     removed or archived.
-
-
-SESSION 2 CHANGES
------------------
 
 Bug fixes:
   - Fixed NxTime splitLayout cellWidths summing to 120% (was "65%","55%").
