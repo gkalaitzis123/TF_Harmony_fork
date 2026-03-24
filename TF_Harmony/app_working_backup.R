@@ -76,10 +76,18 @@ source("helpers.R", local = TRUE)
     validate(need(length(subpfms) >= 1, "No motifs found for the selected TFs."))
 
     outfile <- tempfile(fileext = ".svg")
-    svg(outfile, width = 10, height = 5)
-    grid::grid.newpage()
-    motifStack(subpfms, layout = input$motiftreestyle)
-    dev.off()
+    result <- tryCatch({
+      svg(outfile, width = 10, height = 5)
+      grid::grid.newpage()
+      motifStack(subpfms, layout = input$motiftreestyle)
+      dev.off()
+      TRUE
+    }, error = function(e) {
+      try(dev.off(), silent = TRUE)
+      FALSE
+    })
+    validate(need(result && file.exists(outfile) && file.info(outfile)$size > 500,
+                  "Motif plot failed to render. Please switch tabs and try again."))
 
     list(src = outfile,
          contentType = 'image/svg+xml',
